@@ -1,4 +1,6 @@
+#include <filesystem>
 #include <type_traits>
+#include <utility>
 #include "glimac/default_shader.hpp"
 #include "glm/fwd.hpp"
 #include "glm/glm.hpp"
@@ -39,17 +41,12 @@ glm::mat3 rotateZ(const float alpha)
     return M;
 }
 
+/* ---------- VBO ---------- */
 class VBO {
 public:
-    VBO()
-    {
-        glGenBuffers(1, &_id);
-    }
+    VBO() { glGenBuffers(1, &_id); }
 
-    ~VBO()
-    {
-        glDeleteBuffers(1, &_id);
-    }
+    ~VBO() { glDeleteBuffers(1, &_id); }
 
     VBO(const VBO&)            = delete;
     VBO& operator=(const VBO&) = delete;
@@ -83,10 +80,64 @@ private:
     GLuint _id{};
 };
 
+/* ---------- VAO ---------- */
+
+class VAO {
+public:
+    VAO() { glGenVertexArrays(1, &_id); }
+
+    ~VAO() { glDeleteVertexArrays(1, &_id); }
+
+    VAO(const VAO&)            = delete;
+    VAO& operator=(const VAO&) = delete;
+    VAO(VAO&& other) noexcept
+        : _id{other._id} { other._id = 0; } // Move constructor
+    VAO& operator=(VAO&& other) noexcept    // Move assignment operator
+    {
+        if (this != &other)
+        {                             // Make sure that we don't do silly things when we try to move an object to itself
+            glDeleteBuffers(1, &_id); // Delete the previous object
+            _id       = other._id;    // Copy the object
+            other._id = 0;            // Make sure that other won't delete the _id we just copied
+        }
+        return *this; // move assignment must return a reference to this, so we do it
+    }
+
+    void bind() const { glBindVertexArray(_id); } // pas besoin de préciser GL_ARRAY... car il y a un unique vao
+
+    void debind() const { glBindVertexArray(0); }
+
+private:
+    GLuint _id{};
+};
+
+/* ---------- TEXTURE ----------*/
+
 class Texture {
-    GLuint _id;
-    int    width;
-    int    height;
+    img::Image   image;
+    GLuint       _id{};
+    unsigned int _width;
+    unsigned int _height;
+
+public:
+    explicit Texture(const std::filesystem::path& path)
+        : image(p6::load_image_buffer(path)), _width(image.width()), _height(image.height())
+    {
+        glGenTextures(1, &_id);
+    }
+
+    ~Texture()
+    {
+        glDeleteTextures(1, &_id);
+    }
+
+    void bind() const { glBindTexture(GL_TEXTURE_2D, _id); }
+
+    void debind() const { glBindTexture(GL_TEXTURE_2D, 0); }
+
+    unsigned int   height() const { return _height; }
+    unsigned int   width() const { return _width; } //
+    const uint8_t* data() const { return image.data(); }
 };
 
 int main()
@@ -132,9 +183,9 @@ int main()
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
     /* initialisation vao */
-    GLuint vao;
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao); // pas besoin de préciser GL_ARRAY... car il y a un unique vao
+    VAO vao;
+    vao.bind();
+
     // ON BIND L'IBO COMME LE VAO EST ACTUELLEMENT BINDE
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
 
@@ -155,17 +206,16 @@ int main()
 
     glVertexAttribPointer(vertex_attr_texture, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex2DUV), (const GLvoid*)(offsetof(Vertex2DUV, texture)));
 
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    vbo.debind(); // glBindBuffer(GL_ARRAY_BUFFER, 0);
     // de bind vao
-    glBindVertexArray(0);
+    vao.debind();
 
     // Declare your infinite update loop.
     float degree = 0;
 
-    img::Image triforce = p6::load_image_buffer("assets/textures/triforce.png");
-    GLuint     tex{};
-    glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
+    /* img::Image _triforce = p6::load_image_buffer("assets/textures/triforce.png"); */
+    Texture triforce("assets/textures/triforce.png");
+    triforce.bind();
 
     std::cout << "height : " << triforce.height() << " width : " << triforce.width() << "\n";
 
@@ -175,7 +225,7 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     std::cout << "test2\n";
-    glBindTexture(GL_TEXTURE_2D, 0);
+    triforce.debind();
 
     std::cout << "test3\n";
     ctx.update = [&]() {
@@ -184,7 +234,7 @@ int main()
          *********************************/
 
         glClear(GL_COLOR_BUFFER_BIT);
-        glBindVertexArray(vao);
+        vao.bind();
         shader.use();
         // GLint uTime = glGetUniformLocation(shader.id(), "uTime");
         // glUniform1f(uTime, degree);
@@ -192,6 +242,10 @@ int main()
         GLint uMatrix  = glGetUniformLocation(shader.id(), "uModelMatrix");
         GLint uColor   = glGetUniformLocation(shader.id(), "uColor");
         GLint uTexture = glGetUniformLocation(shader.id(), "uTexture");
+
+        std::cerr << "uMatrix Location: " << uMatrix << std::endl;
+        std::cerr << "uColor Location: " << uColor << std::endl;
+        std::cerr << "uTexture Location: " << uTexture << std::endl;
 
         /* glUniform3fv(uColor, 1, glm::value_ptr(glm::vec3(0.1))); */
         std::vector<glm::mat3> transformations = {
@@ -204,19 +258,17 @@ int main()
         for (auto& transformation : transformations)
         {
             glUniformMatrix3fv(uMatrix, 1, GL_FALSE, glm::value_ptr(transformation));
-
-            glBindTexture(GL_TEXTURE_2D, tex);
+            triforce.bind(); /*
+             glBindTexture(GL_TEXTURE_2D, tex); */
             glUniform1i(uTexture, 0);
             glDrawElements(GL_TRIANGLES, indice.size(), GL_UNSIGNED_INT, 0);
-            glBindTexture(GL_TEXTURE_2D, 0);
+            triforce.debind();
         }
 
-        glBindVertexArray(0);
+        vao.debind();
         degree += 1;
     };
 
     // Should be done last. It starts the infinite loop.
     ctx.start();
-    glDeleteTextures(1, &tex);
-    glDeleteVertexArrays(1, &vao);
 }
