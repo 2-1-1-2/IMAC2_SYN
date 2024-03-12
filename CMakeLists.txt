@@ -58,3 +58,4 @@ add_exercise(TP4_exo2)
 add_exercise(TP4_exo3)
 add_exercise(TP5_6) # TP avec réécriture avec classe
 add_exercise(TP6)
+add_exercise(TP7)

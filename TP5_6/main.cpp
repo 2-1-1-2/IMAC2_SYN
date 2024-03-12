@@ -138,6 +138,13 @@ public:
     unsigned int   height() const { return _height; }
     unsigned int   width() const { return _width; } //
     const uint8_t* data() const { return image.data(); }
+
+    void parameter() const
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width(), height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, data());
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    }
 };
 
 int main()
@@ -220,9 +227,7 @@ int main()
     std::cout << "height : " << triforce.height() << " width : " << triforce.width() << "\n";
 
     // target, level, internal format, width, height, border, format, type, data
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, triforce.width(), triforce.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, triforce.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    triforce.parameter();
 
     std::cout << "test2\n";
     triforce.debind();

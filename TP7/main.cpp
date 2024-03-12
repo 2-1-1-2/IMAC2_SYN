@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <vector>
+#include "glimac/TrackballCamera.hpp"
 #include "glimac/common.hpp"
 #include "glimac/sphere_vertices.hpp"
 #include "glm/ext/matrix_clip_space.hpp"
@@ -11,7 +12,6 @@
 #include "header/helper.hpp"
 #include "header/shaderProgram.hpp"
 #include "p6/p6.h"
-
 int main()
 {
     auto ctx = p6::Context{{1280, 720, "TP6 SPHERE"}};
@@ -23,17 +23,15 @@ int main()
     // EarthProgram             earthProg{};
     std::vector<std::string> uText;
     uText.emplace_back("uEarthTexture");
-    EarthProgram earthProgram("shaders/3D.vs.glsl", "shaders/multiTex3D.fs.glsl");
-    MoonProgram  moonProgram("shaders/3D.vs.glsl", "shaders/tex3D.fs.glsl");
+    EarthProgram    earthProgram("shaders/3D.vs.glsl", "shaders/multiTex3D.fs.glsl");
+    MoonProgram     moonProgram("shaders/3D.vs.glsl", "shaders/tex3D.fs.glsl");
+    TrackballCamera tbc;
     /*"", ""*/
     const std::vector<glimac::ShapeVertex>
         vertices = glimac::sphere_vertices(1.f, 32, 16);
 
     VBO vbo;
     vbo.bind();
-    // target, taille du tableau en oct, pointeur vers les données, usage =>
-    // dessin, les données ne changeront jamais
-    /* glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glimac::ShapeVertex), vertices.data(), GL_STATIC_DRAW); */
     vbo.bufferData(vertices);
     vbo.debind();
 
@@ -74,6 +72,9 @@ int main()
         /*********************************
          * HERE SHOULD COME THE RENDERING CODE
          *********************************/
+
+        const glm::mat4 globalMVMatrix = tbc.getViewMatrix();                            /* glm::translate(glm::mat4{1.f}, {0.f, 0.f, -5.f}); */
+        /* glm::mat4       globalMVMatrix = glm::translate(VMatrix, {0.f, 0.f, 0.f}); */ /*glm::translate(glm::mat4{1.f}, {0.f, 0.f, -5.f})*/
         vao.bind();
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -84,12 +85,11 @@ int main()
 
         earthProgram.uniformText();
 
-        const glm::mat4 globalMVMatrix = glm::translate(glm::mat4{1.f}, {0.f, 0.f, -5.f});
+        const glm::mat4 earthMVMatrix = glm::rotate(globalMVMatrix, ctx.time(), {0.f, 5.f, 0.f});
 
-        const glm::mat4 earthMVMatrix = glm::rotate(globalMVMatrix, ctx.time(), {0.f, 1.f, 0.f});
-        glm::mat4       ProjMatrix    = glm::perspective(glm::radians(70.f), ctx.aspect_ratio(), 0.1f, 100.f);
+        glm::mat4 ProjMatrix = glm::perspective(glm::radians(70.f), ctx.aspect_ratio(), 0.1f, 100.f);
 
-        earthProgram.transformation(ProjMatrix, earthMVMatrix);
+        earthProgram.transformation(ProjMatrix, earthMVMatrix, tbc.getViewMatrix());
 
         earth.activeTexture();
         cloud.activeTexture(1);
@@ -112,7 +112,7 @@ int main()
             moonMVMatrix = glm::translate(moonMVMatrix, rotationAxes[i]); // Translation * Rotation * Translation
             moonMVMatrix = glm::scale(moonMVMatrix, glm::vec3{0.2f});
 
-            moonProgram.transformation(ProjMatrix, moonMVMatrix);
+            moonProgram.transformation(ProjMatrix, moonMVMatrix, tbc.getViewMatrix());
             moon.activeTexture();
             glDrawArrays(GL_TRIANGLES, 0, vertices.size());
             moon.deactiveTexture();
@@ -120,6 +120,13 @@ int main()
             // Fix the typo here
         }
         vao.debind();
+    };
+    ctx.mouse_scrolled = [&tbc](p6::MouseScroll mouseScroll) {
+        tbc.moveFront(mouseScroll.dy);
+    };
+    ctx.mouse_dragged = [&tbc](p6::MouseDrag mouseMove) {
+        tbc.rotateUp(mouseMove.position.x);
+        tbc.rotateLeft(mouseMove.position.y);
     };
 
     // Should be done last. It starts the infinite loop.
